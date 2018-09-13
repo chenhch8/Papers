@@ -1,0 +1,57 @@
+Experiments conducted on ? datasets show ...
+
+... is the task of ...
+
+the potential usage within applications such as ...
+
+For a comprehensive overview of metrics applied in ...
+
+[某种方法] have been proposed in the case of [邻域]
+
+These networks are able to learn both discriminative features and a classifier simultaneously by training inan end-to-end fashion.
+
+not only allowe proper use of [模型, 如：CNN] but also increase the realism of [方法，如：re-id evaluation].
+
+..., resulting in ...
+
+..., originally introduced and applied in [邻域/问题]
+
+Vice versa，[完整句子]
+
+The rest of the paper is structured as follows.
+
+... persists as a hot topic within the research community.
+
+Due to more focus on ..., ...
+
+Ever since [sth.], [完整句子]
+
+A different approach is followed by [sb.] who apply [方法用到的模型] to do sth.
+
+Common for aforementioned methods is ...
+
+We outline [sth.]
+
+We observe that ...
+
+..., to our knowledge, ...
+
+In case of ..., ...
+
+[sth.] has shown to outperform other ...
+
+It is worth doing ...
+
+[sth.] has attracted increasing attention.
+
+Firstly, ... Afterwards, ...
+
+As illustrated in [图片], ...
+
+The vast majority of [sth.] ...
+
+With [adj.] sucess of [sth.], it is increasingly desirable to [do sth.]
+
+[sth.] be reformulated as: [具体公式]
+
+..., which can be intuitively explained in ...
