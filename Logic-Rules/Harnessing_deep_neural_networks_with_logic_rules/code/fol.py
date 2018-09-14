@@ -20,10 +20,9 @@ class FOL(object):
     
     def __init__(self, K, input, fea):
         """ Initialize
-    
-    : type K: int
-    : param K: the number of classes 
-    """
+        : type K: int
+        : param K: the number of classes 
+        """
         self.input = input
         self.fea = fea
         # Record the data relevance (binary)
@@ -97,21 +96,20 @@ class FOL_But(FOL):
     """ x=x1_but_x2 => { y => pred(x2) AND pred(x2) => y } """
     def __init__(self, K, input, fea):
         """ Initialize
-    
-    :type K: int
-    :param K: the number of classes 
+        :type K: int
+        :param K: the number of classes 
 
-    :type fea: theano.tensor.dtensor4
-    :param fea: symbolic feature tensor, of shape 3
-                fea[0]   : 1 if x=x1_but_x2, 0 otherwise
-                fea[1:2] : classifier.predict_p(x_2)
-    """
+        :type fea: theano.tensor.dtensor4
+        :param fea: symbolic feature tensor, of shape 3
+                    fea[0]   : 1 if x=x1_but_x2, 0 otherwise
+                    fea[1:2] : classifier.predict_p(x_2)
+        :shape fea: (sent_sum|batch_sum, 3), where 3 indicats label, p(0), p(1)
+        """
         assert K == 2
         super(FOL_But, self).__init__(K, input, fea)
 
     """
     Rule-specific functions
-
     """
     def condition_single(self, x, f):
         return T.cast(T.eq(f[0],1.), dtype=theano.config.floatX)
@@ -125,19 +123,23 @@ class FOL_But(FOL):
 
     """
     Efficient version specific to the BUT-rule
-
     """
     def log_distribution(self, w, X=None, F=None):
         if F == None:
             X, F = self.input, self.fea
-        F_mask = F[:,0] 
+        # shape=(sent_sum|batch_size, 1)
+        # vale=[[?], [?], ...] where ? is 0/1, meanings no-but/but
+        F_mask = F[:,0]
+        # shape=(sent_sum|batch_size, class=2)
+        # vale=[[p_0(0), p_0(1)], [p_1(0), p_1(1)], ...], where p_i(label) is the probability of the i-th sentence that has label.
         F_fea = F[:,1:]
-        # y = 0
+        # y = 0, shape=(sent_sum|batch_size, 1)
         distr_y0 = w*F_mask*F_fea[:,0]
-        # y = 1 
+        # y = 1, shape=(sent_sum|batch_size, 1)
         distr_y1 = w*F_mask*F_fea[:,1]
         distr_y0 = distr_y0.reshape([distr_y0.shape[0],1])
         distr_y1 = distr_y1.reshape([distr_y1.shape[0],1])
+        # shape=(sent_sum|batch_size, 2)
         distr = T.concatenate([distr_y0, distr_y1], axis=1)
         return distr
 

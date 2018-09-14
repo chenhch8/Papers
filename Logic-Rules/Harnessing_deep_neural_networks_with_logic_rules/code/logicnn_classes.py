@@ -25,7 +25,7 @@ def Iden(x):
         
 class HiddenLayer(object):
     """
-    Class for HiddenLayer
+    Class for HiddenLayer -- y=Wx+b / y=f(Wx+b)
     """
     def __init__(self, rng, input, n_in, n_out, activation, W=None, b=None):
 
@@ -35,7 +35,7 @@ class HiddenLayer(object):
         if W is None:            
             if activation.func_name == "ReLU":
                 W_values = numpy.asarray(0.01 * rng.standard_normal(size=(n_in, n_out)), dtype=theano.config.floatX)
-            else:                
+            else:         
                 W_values = numpy.asarray(rng.uniform(low=-numpy.sqrt(6. / (n_in + n_out)), high=numpy.sqrt(6. / (n_in + n_out)),
                                                      size=(n_in, n_out)), dtype=theano.config.floatX)
             W = theano.shared(value=W_values, name='W')        
@@ -54,9 +54,14 @@ class HiddenLayer(object):
         self.params = [self.W, self.b]
 
 def _dropout_from_layer(rng, layer, p):
-    """p is the probablity of dropping a unit
-"""
+    """
+    p is the probablity of dropping a unit
+    """
     srng = theano.tensor.shared_randomstreams.RandomStreams(rng.randint(999999))
+    # binomial: 生成shape为size的二项分布矩阵
+    #   :n: 每个元素取值最大取值，二项分布时取1
+    #   :p: 生成1的概率
+    #   :size: 矩阵大小
     # p=1-p because 1's indicate keep and p is prob of dropping
     mask = srng.binomial(n=1, p=1-p, size=layer.shape)
     # The cast is important because
@@ -75,7 +80,7 @@ class DropoutHiddenLayer(HiddenLayer):
 
 class MLPDropout(object):
     """A multilayer perceptron with dropout"""
-    def __init__(self,rng,input,layer_sizes,dropout_rates,activations):
+    def __init__(self, rng, input, layer_sizes, dropout_rates, activations):
 
         #rectified_linear_activation = lambda x: T.maximum(0.0, x)
 
@@ -89,17 +94,22 @@ class MLPDropout(object):
         # dropout the input
         next_dropout_layer_input = _dropout_from_layer(rng, input, p=dropout_rates[0])
         layer_counter = 0
-        for n_in, n_out in self.weight_matrix_sizes[:-1]:
+        # generate N layers of CNN, where N=len(weight_matrix_sizes)-1
+        # Actually N=0 here, thus 'for' will not be excuted
+        for n_in, n_out in self.weight_matrix_sizes[:-1]:  # [(300, 2)]
+            # y=Wx+b / y=f(Wx+b) -> dropout(y)
             next_dropout_layer = DropoutHiddenLayer(rng=rng,
                     input=next_dropout_layer_input,
                     activation=activations[layer_counter],
                     n_in=n_in, n_out=n_out,
                     dropout_rate=dropout_rates[layer_counter])
             self.dropout_layers.append(next_dropout_layer)
+            # shape=(sent_sum,n_out=class=2)
             next_dropout_layer_input = next_dropout_layer.output
 
             # Reuse the parameters from the dropout layer here, in a different
             # path through the graph.
+            # y=Wx+b / y=f(Wx+b)
             next_layer = HiddenLayer(rng=rng,
                     input=next_layer_input,
                     activation=activations[layer_counter],
@@ -108,18 +118,21 @@ class MLPDropout(object):
                     b=next_dropout_layer.b,
                     n_in=n_in, n_out=n_out)
             self.layers.append(next_layer)
+            # shape=(sent_sum,n_out=class=2)
             next_layer_input = next_layer.output
             #first_layer = False
             layer_counter += 1
         
         # Set up the output layer
         n_in, n_out = self.weight_matrix_sizes[-1]
+        # y=Ax+b
         dropout_output_layer = LogisticRegression(
                 input=next_dropout_layer_input,
                 n_in=n_in, n_out=n_out)
         self.dropout_layers.append(dropout_output_layer)
 
         # Again, reuse paramters in the dropout output.
+        # y=Ax+b
         output_layer = LogisticRegression(
             input=next_layer_input,
             # scale the weight matrix W with (1-p)
@@ -231,30 +244,26 @@ class MLP(object):
         
 class LogisticRegression(object):
     """Multi-class Logistic Regression Class
-
     The logistic regression is fully described by a weight matrix :math:`W`
     and bias vector :math:`b`. Classification is done by projecting data
     points onto a set of hyperplanes, the distance to which is used to
     determine a class membership probability.
     """
-
     def __init__(self, input, n_in, n_out, W=None, b=None):
         """ Initialize the parameters of the logistic regression
-
-    :type input: theano.tensor.TensorType
-    :param input: symbolic variable that describes the input of the
-    architecture (one minibatch)
-    
-    :type n_in: int
-    :param n_in: number of input units, the dimension of the space in
-    which the datapoints lie
-    
-    :type n_out: int
-    :param n_out: number of output units, the dimension of the space in
-    which the labels lie
-    
-    """
-
+        :type input: theano.tensor.TensorType
+        :param input: symbolic variable that describes the input of the
+        architecture (one minibatch)
+        
+        :type n_in: int
+        :param n_in: number of input units, the dimension of the space in
+        which the datapoints lie
+        
+        :type n_out: int
+        :param n_out: number of output units, the dimension of the space in
+        which the labels lie
+        """
+        # y=Ax+b
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
         if W is None:
             self.W = theano.shared(
@@ -271,12 +280,14 @@ class LogisticRegression(object):
         else:
             self.b = b
 
-
         # compute vector of class-membership probabilities in symbolic form
+        # softmax: 默认行优化
+        # shape=(sent_sum,class)
         self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
 
         # compute prediction as class whose probability is maximal in
         # symbolic form
+        # shape=(sent_sum,)
         self.y_pred = T.argmax(self.p_y_given_x, axis=1)
 
         # parameters of the model
@@ -285,20 +296,18 @@ class LogisticRegression(object):
     def negative_log_likelihood(self, y):
         """Return the mean of the negative log-likelihood of the prediction
         of this model under a given target distribution.
-
-    .. math::
-    
-    \frac{1}{|\mathcal{D}|} \mathcal{L} (\theta=\{W,b\}, \mathcal{D}) =
-    \frac{1}{|\mathcal{D}|} \sum_{i=0}^{|\mathcal{D}|} \log(P(Y=y^{(i)}|x^{(i)}, W,b)) \\
-    \ell (\theta=\{W,b\}, \mathcal{D})
-    
-    :type y: theano.tensor.TensorType
-    :param y: corresponds to a vector that gives for each example the
-    correct label
-    
-    Note: we use the mean instead of the sum so that
-    the learning rate is less dependent on the batch size
-    """
+        .. math::
+            \frac{1}{|\mathcal{D}|} \mathcal{L} (\theta=\{W,b\}, \mathcal{D}) =
+            \frac{1}{|\mathcal{D}|} \sum_{i=0}^{|\mathcal{D}|} \log(P(Y=y^{(i)}|x^{(i)}, W,b)) \\
+            \ell (\theta=\{W,b\}, \mathcal{D})
+            
+        :type y: theano.tensor.TensorType
+        :param y: corresponds to a vector that gives for each example the
+        correct label
+        
+        Note: we use the mean instead of the sum so that
+        the learning rate is less dependent on the batch size
+        """
         # y.shape[0] is (symbolically) the number of rows in y, i.e.,
         # number of examples (call it n) in the minibatch
         # T.arange(y.shape[0]) is a symbolic vector which will contain
@@ -315,11 +324,10 @@ class LogisticRegression(object):
     def soft_negative_log_likelihood(self, y):
         """The `soft' version of negative_log_likelihood, where y is a distribution 
         over classes rather than a one-hot coding 
-
-    :type y: theano.tensor.TensorType
-    :param y: corresponds to a vector that gives for each example the distribution 
-     over classes. y.shape = [n, K]
-    """
+        :type y: theano.tensor.TensorType
+        :param y: corresponds to a vector that gives for each example the distribution 
+         over classes. y.shape = [n, K]
+        """
         return -T.mean(T.sum(T.log(self.p_y_given_x)*y,axis=1)) 
 
 
@@ -354,7 +362,7 @@ class LeNetConvPoolLayer(object):
         :type rng: numpy.random.RandomState
         :param rng: a random number generator used to initialize weights
 
-        :type input: theano.tensor.dtensor4
+        :type input: shape=(sent_sum,1,sent_len,word_size)
         :param input: symbolic image tensor, of shape image_shape
 
         :type filter_shape: tuple or list of length 4
@@ -368,7 +376,6 @@ class LeNetConvPoolLayer(object):
         :type poolsize: tuple or list of length 2
         :param poolsize: the downsampling (pooling) factor (#rows,#cols)
         """
-
         assert image_shape[1] == filter_shape[1]
         self.input = input
         self.filter_shape = filter_shape
@@ -381,7 +388,7 @@ class LeNetConvPoolLayer(object):
         # each unit in the lower layer receives a gradient from:
         # "num output feature maps * filter height * filter width" /
         #   pooling size
-        fan_out = (filter_shape[0] * numpy.prod(filter_shape[2:]) /numpy.prod(poolsize))
+        fan_out = (filter_shape[0] * numpy.prod(filter_shape[2:]) / numpy.prod(poolsize))
         # initialize weights with random weights
         if self.non_linear=="none" or self.non_linear=="relu":
             self.W = theano.shared(numpy.asarray(rng.uniform(low=-0.01,high=0.01,size=filter_shape), 
@@ -394,7 +401,9 @@ class LeNetConvPoolLayer(object):
         self.b = theano.shared(value=b_values, borrow=True, name="b_conv")
         
         # convolve input feature maps with filters
-        conv_out = conv.conv2d(input=input, filters=self.W,filter_shape=self.filter_shape, image_shape=self.image_shape)
+        # image_shape is the shape of input
+        # shape=(sent_sum, filter_sum, h, 1)
+        conv_out = conv.conv2d(input=input, filters=self.W, filter_shape=self.filter_shape, image_shape=self.image_shape)
         if self.non_linear=="tanh":
             conv_out_tanh = T.tanh(conv_out + self.b.dimshuffle('x', 0, 'x', 'x'))
             # self.output = downsample.max_pool_2d(input=conv_out_tanh, ds=self.poolsize, ignore_border=True)
@@ -416,6 +425,7 @@ class LeNetConvPoolLayer(object):
         predict for new data
         """
         img_shape = (batch_size, 1, self.image_shape[2], self.image_shape[3])
+        # shape=(batch_size, filter_shape[0], ?, 1)
         conv_out = conv.conv2d(input=new_data, filters=self.W, filter_shape=self.filter_shape, image_shape=img_shape)
         if self.non_linear=="tanh":
             conv_out_tanh = T.tanh(conv_out + self.b.dimshuffle('x', 0, 'x', 'x'))
@@ -429,6 +439,7 @@ class LeNetConvPoolLayer(object):
             # pooled_out = downsample.max_pool_2d(input=conv_out, ds=self.poolsize, ignore_border=True)
             pooled_out = pool.pool_2d(input=conv_out, ds=self.poolsize, ignore_border=True, mode='max')
             output = pooled_out + self.b.dimshuffle('x', 0, 'x', 'x')
+        # shape=(batch_size, filter_shape[0], 1, 1)
         return output
 
 
@@ -440,8 +451,9 @@ class LogicNN(object):
         """
         :type input: theano.tensor.dtensor4
         :param input: symbolic image tensor, of shape image_shape
-    """
+        """
         self.input = input
+        # CNN
         self.network = network
         self.rules = rules
         self.rule_lambda = theano.shared(
@@ -452,9 +464,12 @@ class LogicNN(object):
         self.C = C
         
         ## q(y|x)
+        # shape=(sent_sum|batch_size, class=2)
         dropout_q_y_given_x = self.network.dropout_p_y_given_x*1.0
+        # shape=(sent_sum|batch_size, class=2)
         q_y_given_x = self.network.p_y_given_x*1.0
         # combine rule constraints
+        # shape=(sent_sum|batch_size, 2)
         distr = self.calc_rule_constraints()
         q_y_given_x *= distr
         dropout_q_y_given_x *= distr
@@ -478,16 +493,27 @@ class LogicNN(object):
         if new_rule_fea==None:
             new_rule_fea = [None]*len(self.rules)
         distr_all = T.cast(0, dtype=theano.config.floatX)
+        # calc the exponent of exp in (4): distr_all
+        # for every rule: 'l' in (3)
         for i,rule in enumerate(self.rules):
-            distr = rule.log_distribution(self.C*self.rule_lambda[i],new_data,new_rule_fea[i])
+            # shape=(sent_sum|batch_size, 2)
+            # each element is 'C * lambda_i * p(0)|p(1)' or '0' for the i-th rule
+            # for all groundings of i-th rule: g_l in (3)
+            distr = rule.log_distribution(self.C*self.rule_lambda[i], new_data, new_rule_fea[i])
             distr_all += distr
+        # shape=(sent_sum|batch_size, 2)
         distr_all += distr
-        #
+        # shape=(sent_sum|batch_size, 1)
         distr_y0 = distr_all[:,0]
         distr_y0 = distr_y0.reshape([distr_y0.shape[0], 1])
+        # T.tile(tensor, [a, b]): 首先在 tensor 的第二维上拷贝 b 次，然后在第一维上拷贝 a 次
+        # shape=(sent_sum|batch_size, 2)
         distr_y0_copies = T.tile(distr_y0, [1, distr_all.shape[1]])
+        # 目的：计算每条 but 语句的其正负概率之间的“距离” -- ？不理解此处目的？
+        # shape=(sent_sum|batch_size, 2), 其中 distr_all[,0]=0
         distr_all -= distr_y0_copies
-        distr_all = T.maximum(T.minimum(distr_all, 60.), -60.) # truncate to avoid over-/under-flow
+        distr_all = T.maximum(T.minimum(distr_all, 60.), -60.) # truncate(缩短) to avoid over-/under-flow
+        # shape=(sent_sum|batch_size, 2)
         return T.exp(distr_all)
 
     def set_pi(self, new_pi):

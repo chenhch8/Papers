@@ -49,6 +49,7 @@ def train_conv_net(datasets,
     patience = number of iterations without performance improvement before stopping
     """    
     rng = np.random.RandomState(3435)
+    # 其实为句子的长度sent_len
     img_h = len(datasets[0][0])-1
     filter_w = img_w 
     feature_maps = hidden_units[0]
@@ -56,6 +57,9 @@ def train_conv_net(datasets,
     pool_sizes = []
     for filter_h in filter_hs:
         filter_shapes.append((feature_maps, 1, filter_h, filter_w))
+        # 在img_h×img_w大小的图片上进行s=1,f=f_h×f_w的卷积操作时，
+        # 所得的卷积结果图大小为(img_h-f_h+1)×(img_w-f_w+1)
+        # 然后经过大小为(img_h-f_h+1)×(img_w-f_w+1)的池化层后，就只剩下一个“点”了
         pool_sizes.append((img_h-filter_h+1, img_w-filter_w+1))
     # [('image shape', 61, 300), ('filter shape', [(100, 1, 3, 300), (100, 1, 4, 300), (100, 1, 5, 300)]),
     #  ('hidden_units', [100, 2]), ('dropout', [0.4]), ('batch_size', 50), ('non_static', True),
@@ -70,37 +74,58 @@ def train_conv_net(datasets,
     
     #define model architecture
     index = T.lscalar()
-    x = T.matrix('x')   
+    # shape=([sent_sum|batch_size], [sent_len|img_h]): 即共有sent_sum句话，每句由sent_len个单词的id组成
+    x = T.matrix('x')
+    # shape=(sent_sum, 1) 
     y = T.ivector('y')
+    # shape=(vocal_size, word_size)
     Words = theano.shared(value = U, name = "Words")
     zero_vec_tensor = T.vector()
     zero_vec = np.zeros(img_w)
     set_zero = theano.function([zero_vec_tensor], updates=[(Words, T.set_subtensor(Words[0,:], zero_vec_tensor))], allow_input_downcast=True)
+    # x.flatten(): 将 x 按行展开
+    # shape=(sent_sum,1,sent_len,word_size)
+    # 对应于图像，其意思即为：共有sent_sum张图像，每张图像的通道为1且大小为sent_len×word_size
     layer0_input = Words[T.cast(x.flatten(),dtype="int32")].reshape((x.shape[0], 1, x.shape[1], Words.shape[1]))
     conv_layers = []
     layer1_inputs = []
+    # 第1层输入有filter_hs种卷积核
     for i in xrange(len(filter_hs)):
+        # value=[filter_sum,filter_layer,filter_h,filter_w]
+        # 即共有filter_sum个卷积核，每个卷积核的大小为word_h×word_w且层数/通道为filter_layer
         filter_shape = filter_shapes[i]
         pool_size = pool_sizes[i]
+        # image_shape is actually the shape of input
         conv_layer = LeNetConvPoolLayer(rng, input=layer0_input, image_shape=(batch_size, 1, img_h, img_w),
                                 filter_shape=filter_shape, poolsize=pool_size, non_linear=conv_non_linear)
+        # flatten(axis):axis>0, 即将tensor从axis维度开始的所有维度进行“坍缩”，具体如下
+        # conv_layer.output: shape=(sent_sum,filter_sum)
+        # layer1_input: shape=(sent_sum,filter_sum)
         layer1_input = conv_layer.output.flatten(2)
         conv_layers.append(conv_layer)
         layer1_inputs.append(layer1_input)
+    # shape=(sent_sum, filter_sum*len(filter_hs)=300)
     layer1_input = T.concatenate(layer1_inputs, 1)
-    hidden_units[0] = feature_maps*len(filter_hs)   
+    hidden_units[0] = feature_maps*len(filter_hs)
+    # 实际上，这里的CNN仅有两层：input-conv(-max_pool)-output
     classifier = MLPDropout(rng, input=layer1_input, layer_sizes=hidden_units, activations=activations, dropout_rates=dropout_rate)
   
-    #build the feature of BUT-rule
+    # build the feature of BUT-rule
     f_but = T.fmatrix('f_but')
+    # shape=(batch_size,1)
     f_but_ind = T.fmatrix('f_ind') # indicators
     f_but_layer0_input = Words[T.cast(f_but.flatten(),dtype="int32")].reshape((f_but.shape[0],1,f_but.shape[1],Words.shape[1]))
     f_but_pred_layers = []
     for conv_layer in conv_layers:
+        # shape=(batch_size, filter_sum=filter_shape[0], 1, 1)
+        # after flatten: shape=(batch_size, filter_sum)
         f_but_layer0_output = conv_layer.predict(f_but_layer0_input, batch_size)
         f_but_pred_layers.append(f_but_layer0_output.flatten(2))
+    # shape=(batch_size, filter_sum*len(filter_hs)=300)
     f_but_layer1_input = T.concatenate(f_but_pred_layers, 1)
+    # shape=(batch_size, class=2)
     f_but_y_pred_p = classifier.predict_p(f_but_layer1_input)
+    # shape=(batch_size, 1+class=3)
     f_but_full = T.concatenate([f_but_ind,f_but_y_pred_p],axis=1) # batch_size x 1 + batch_size x K
     f_but_full = theano.gradient.disconnected_grad(f_but_full)
 
