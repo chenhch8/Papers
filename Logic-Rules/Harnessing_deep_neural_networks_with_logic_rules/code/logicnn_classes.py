@@ -263,7 +263,7 @@ class LogisticRegression(object):
         :param n_out: number of output units, the dimension of the space in
         which the labels lie
         """
-        # y=Ax+b
+        # y=softmax(Ax+b)
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
         if W is None:
             self.W = theano.shared(
@@ -446,8 +446,8 @@ class LeNetConvPoolLayer(object):
 execfile("fol.py")
 
 class LogicNN(object):
-    def __init__(self, rng, input, network,
-                 rules=[], rule_lambda=[], pi=0., C=1.):
+
+    def __init__(self, rng, input, network, rules=[], rule_lambda=[], pi=0., C=1.):
         """
         :type input: theano.tensor.dtensor4
         :param input: symbolic image tensor, of shape image_shape
@@ -490,7 +490,6 @@ class LogicNN(object):
         # collect all learnable parameters
         self.params_p = self.network.params
 
-
     def calc_rule_constraints(self, new_data=None, new_rule_fea=None):
         if new_rule_fea==None:
             new_rule_fea = [None]*len(self.rules)
@@ -521,6 +520,7 @@ class LogicNN(object):
 
     def set_pi(self, new_pi):
         self.pi.set_value(new_pi)
+        
     def get_pi(self):
         return self.pi.get_value()
 

@@ -111,6 +111,7 @@ def train_conv_net(datasets,
     classifier = MLPDropout(rng, input=layer1_input, layer_sizes=hidden_units, activations=activations, dropout_rates=dropout_rate)
   
     # build the feature of BUT-rule
+    # shape=([sent_sum|batch_size], [sent_len|img_h]): 即共有sent_sum句话，每句由sent_len个单词的id组成
     f_but = T.fmatrix('f_but')
     # shape=(batch_size,1)
     f_but_ind = T.fmatrix('f_ind') # indicators
@@ -150,8 +151,8 @@ def train_conv_net(datasets,
     dropout_cost_p = logic_nn.dropout_negative_log_likelihood(y) 
     grad_updates_p = sgd_updates_adadelta(params_p, dropout_cost_p, lr_decay, 1e-6, sqr_norm_lim)
     
-    #shuffle dataset and assign to mini batches. if dataset size is not a multiple of mini batches, replicate 
-    #extra data (at random)
+    # shuffle dataset and assign to mini batches. if dataset size is not a multiple of mini batches, replicate
+    # extra data (at random)
     np.random.seed(3435)
     # training data
     if datasets[0].shape[0] % batch_size > 0:
@@ -180,7 +181,7 @@ def train_conv_net(datasets,
     for k in new_fea.keys():
         new_fea[k] = new_fea[k][permutation_order]
     new_text = new_text[permutation_order]
-    n_batches = new_data.shape[0]/batch_size
+    n_batches = new_data.shape[0] / batch_size
     n_train_batches = n_batches
     train_set = new_data
     train_set_x, train_set_y = shared_dataset((train_set[:,:img_h],train_set[:,-1]))
@@ -233,31 +234,31 @@ def train_conv_net(datasets,
 
     ### compile theano functions to get train/val/test errors
     val_model = theano.function([index], logic_nn.errors(y),
-         givens={
+        givens={
             x: val_set_x[index * batch_size: (index + 1) * batch_size],
-             y: val_set_y[index * batch_size: (index + 1) * batch_size],
-             f_but: val_fea['but'][index * batch_size: (index + 1) * batch_size],
-             f_but_ind: val_fea_but_ind[index * batch_size: (index + 1) * batch_size,:]},
-                                allow_input_downcast=True,
-                                on_unused_input='warn')
+            y: val_set_y[index * batch_size: (index + 1) * batch_size],
+            f_but: val_fea['but'][index * batch_size: (index + 1) * batch_size],
+            f_but_ind: val_fea_but_ind[index * batch_size: (index + 1) * batch_size,:] },
+        allow_input_downcast=True,
+        on_unused_input='warn')
             
     test_model = theano.function([index], logic_nn.errors(y),
-             givens={
+            givens={
                 x: train_set_x[index * batch_size: (index + 1) * batch_size],
-                 y: train_set_y[index * batch_size: (index + 1) * batch_size],
-                 f_but: train_fea['but'][index * batch_size: (index + 1) * batch_size],
-                 f_but_ind: train_fea_but_ind[index * batch_size: (index + 1) * batch_size,:]},
-                                 allow_input_downcast=True,
-                                 on_unused_input='warn')
+                y: train_set_y[index * batch_size: (index + 1) * batch_size],
+                f_but: train_fea['but'][index * batch_size: (index + 1) * batch_size],
+                f_but_ind: train_fea_but_ind[index * batch_size: (index + 1) * batch_size,:]},
+            allow_input_downcast=True,
+            on_unused_input='warn')
 
     train_model = theano.function([index], cost_p, updates=grad_updates_p,
-          givens={
-            x: train_set_x[index*batch_size:(index+1)*batch_size],
-              y: train_set_y[index*batch_size:(index+1)*batch_size],
-              f_but: train_fea['but'][index * batch_size: (index + 1) * batch_size],
-              f_but_ind: train_fea_but_ind[index * batch_size: (index + 1) * batch_size,:]},
-                                  allow_input_downcast = True,
-                                  on_unused_input='warn')
+            givens={
+                x: train_set_x[index*batch_size:(index+1)*batch_size],
+                y: train_set_y[index*batch_size:(index+1)*batch_size],
+                f_but: train_fea['but'][index*batch_size:(index+1)*batch_size],
+                f_but_ind: train_fea_but_ind[index*batch_size:(index+1)*batch_size,:]},
+            allow_input_downcast = True,
+            on_unused_input='warn')
 
     ### setup testing
     test_size = test_set_x.shape[0]
@@ -350,7 +351,6 @@ def get_pi(cur_iter, params=None, pi=None):
 
 def shared_dataset(data_xy, borrow=True):
         """ Function that loads the dataset into shared variables
-
         The reason we store our dataset in shared variables is to allow
         Theano to copy it into the GPU memory (when code is run on GPU).
         Since copying data into the GPU is slow, copying a minibatch everytime
@@ -467,8 +467,9 @@ def make_idx_data(revs, fea, word_idx_map, max_l=51, k=300, filter_h=5):
         train_fea[k], dev_fea[k], test_fea[k] = [],[],[]
     # for every sentence
     for i,rev in enumerate(revs):
-        # sent=[wordId_1,wordId_2,..,wordId_n,label]
+        # sent=[wordId_1,wordId_2,..,wordId_n]
         sent = get_idx_from_sent(rev["text"], word_idx_map, max_l, k, filter_h)  # len(sent)=max_l+2*(filter_h-1)
+        # sent=[wordId_1,wordId_2,..,wordId_n,label]
         sent.append(rev["y"])  # len(sent)=max_l+2*(filter_h-1)+1
         # fea['but']=[[wordId_1,wordId_2,..,wordId_n]...], len(fea['but'])=max_l+2*(filter_h-1)
         fea['but'].append(get_idx_from_but_fea(fea['but_text'][i], fea['but_ind'][i], word_idx_map, max_l, k, filter_h))
@@ -516,7 +517,7 @@ if __name__=="__main__":
     x = cPickle.load(open("%s/stsa.binary.p"%path,"rb"))
     # resv: [{ y: 0/1,          # 0/1 - 负/正样本
     #          text: string,    # 经过 pre-processed 的句子
-    #          num_words: int,  # 句子单词数量
+    #          num_words: int,  # 句子中单词数量
     #          split: 0/1/2     # 0/1/2 - train/dev/test 数据集 }]
     # W: shape=(vocab_size, word_vector_dims)
     # W2: shape=(vocab_size, word_vector_dims)
