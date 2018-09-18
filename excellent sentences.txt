@@ -55,3 +55,5 @@ With [adj.] sucess of [sth.], it is increasingly desirable to [do sth.]
 [sth.] be reformulated as: [具体公式]
 
 ..., which can be intuitively explained in ...
+
+Methods based on representation learning currently hold the start-of-the-art in many natural language processing and knowledge base inference tasks.

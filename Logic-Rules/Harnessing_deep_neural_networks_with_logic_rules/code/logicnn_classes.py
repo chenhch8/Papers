@@ -282,7 +282,7 @@ class LogisticRegression(object):
 
         # compute vector of class-membership probabilities in symbolic form
         # softmax: 默认行优化
-        # shape=(sent_sum,class)
+        # shape=(sent_sum,class=2)
         self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
 
         # compute prediction as class whose probability is maximal in
@@ -313,7 +313,7 @@ class LogisticRegression(object):
         # T.arange(y.shape[0]) is a symbolic vector which will contain
         # [0,1,2,... n-1] T.log(self.p_y_given_x) is a matrix of
         # Log-Probabilities (call it LP) with one row per example and
-        # one column per class LP[T.arange(y.shape[0]),y] is a vector
+        # one column per class. LP[T.arange(y.shape[0]),y] is a vector
         # v containing [LP[0,y[0]], LP[1,y[1]], LP[2,y[2]], ...,
         # LP[n-1,y[n-1]]] and T.mean(LP[T.arange(y.shape[0]),y]) is
         # the mean (across minibatch examples) of the elements in v,
@@ -463,7 +463,7 @@ class LogicNN(object):
         self.pi = theano.shared(value=pi, name='pi')
         self.C = C
         
-        ## q(y|x)
+        ## calc q(y|x)
         # shape=(sent_sum|batch_size, class=2)
         dropout_q_y_given_x = self.network.dropout_p_y_given_x*1.0
         # shape=(sent_sum|batch_size, class=2)
@@ -471,17 +471,19 @@ class LogicNN(object):
         # combine rule constraints
         # shape=(sent_sum|batch_size, 2)
         distr = self.calc_rule_constraints()
+        # q(y|x) 公式 (4)
         q_y_given_x *= distr
         dropout_q_y_given_x *= distr
         # normalize
         n = self.input.shape[0]
-        n_dropout_q_y_given_x = dropout_q_y_given_x / T.sum(dropout_q_y_given_x,axis=1).reshape((n,1))
+        n_dropout_q_y_given_x = dropout_q_y_given_x / T.sum(dropout_q_y_given_x, axis=1).reshape((n,1))
         n_q_y_given_x = q_y_given_x / T.sum(q_y_given_x,axis=1).reshape((n,1))
         self.dropout_q_y_given_x = theano.gradient.disconnected_grad(n_dropout_q_y_given_x)
         self.q_y_given_x = theano.gradient.disconnected_grad(n_q_y_given_x)
         
         # compute prediction as class whose probability is maximal in
         # symbolic form
+        # shape=(snet_sum|batch_size,)
         self.q_y_pred = T.argmax(q_y_given_x, axis=1)
         self.p_y_pred = T.argmax(self.network.p_y_given_x, axis=1)
 
@@ -497,19 +499,20 @@ class LogicNN(object):
         # for every rule: 'l' in (3)
         for i,rule in enumerate(self.rules):
             # shape=(sent_sum|batch_size, 2)
-            # each element is 'C * lambda_i * p(0)|p(1)' or '0' for the i-th rule
+            # each element is 'C * lambda_i * (p(0)|p(1))' or '0' for the i-th rule
             # for all groundings of i-th rule: g_l in (3)
             distr = rule.log_distribution(self.C*self.rule_lambda[i], new_data, new_rule_fea[i])
             distr_all += distr
         # shape=(sent_sum|batch_size, 2)
         distr_all += distr
-        # shape=(sent_sum|batch_size, 1)
+        # shape=(sent_sum|batch_size,)
         distr_y0 = distr_all[:,0]
+        # shape=(sent_sum|batch_size, 1)
         distr_y0 = distr_y0.reshape([distr_y0.shape[0], 1])
         # T.tile(tensor, [a, b]): 首先在 tensor 的第二维上拷贝 b 次，然后在第一维上拷贝 a 次
         # shape=(sent_sum|batch_size, 2)
         distr_y0_copies = T.tile(distr_y0, [1, distr_all.shape[1]])
-        # 目的：计算每条 but 语句的其正负概率之间的“距离” -- ？不理解此处目的？
+        # 目的：计算每条 but 语句的其正负概率之间的“距离” -- ？不理解此处目的?
         # shape=(sent_sum|batch_size, 2), 其中 distr_all[,0]=0
         distr_all -= distr_y0_copies
         distr_all = T.maximum(T.minimum(distr_all, 60.), -60.) # truncate(缩短) to avoid over-/under-flow
@@ -519,14 +522,16 @@ class LogicNN(object):
     def set_pi(self, new_pi):
         self.pi.set_value(new_pi)
     def get_pi(self):
-        return self.pi.get_value() 
+        return self.pi.get_value()
 
     def dropout_negative_log_likelihood(self, y):
+        # 公式 (2)——objective function
         nlld = (1.0-self.pi)*self.network.dropout_negative_log_likelihood(y)
         nlld += self.pi*self.network.soft_dropout_negative_log_likelihood(self.dropout_q_y_given_x)
         return nlld
 
     def negative_log_likelihood(self, y):
+        # 公式 (2)——objective function
         nlld = (1.0-self.pi)*self.network.negative_log_likelihood(y)
         nlld += self.pi*self.network.soft_negative_log_likelihood(self.q_y_given_x)
         return nlld

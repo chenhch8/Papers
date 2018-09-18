@@ -125,24 +125,27 @@ def train_conv_net(datasets,
     f_but_layer1_input = T.concatenate(f_but_pred_layers, 1)
     # shape=(batch_size, class=2)
     f_but_y_pred_p = classifier.predict_p(f_but_layer1_input)
-    # shape=(batch_size, 1+class=3)
-    f_but_full = T.concatenate([f_but_ind,f_but_y_pred_p],axis=1) # batch_size x 1 + batch_size x K
+    # shape=(batch_size, label+class=1+2=3)
+    f_but_full = T.concatenate([f_but_ind,f_but_y_pred_p], axis=1) # batch_size x 1 + batch_size x K
     f_but_full = theano.gradient.disconnected_grad(f_but_full)
 
-    #add logic layer
+    # add logic layer
     nclasses = 2
     rules = [FOL_But(nclasses, x, f_but_full)]
     rule_lambda = [1]
     new_pi = get_pi(cur_iter=0, params=pi_params)
     logic_nn = LogicNN(rng, input=x, network=classifier, rules=rules, rule_lambda=rule_lambda, pi=new_pi, C=C)
  
-    #define parameters of the model and update functions using adadelta
+    # define parameters of the model and update functions using adadelta
+    # list
     params_p = logic_nn.params_p
     for conv_layer in conv_layers:
+        # append list
         params_p += conv_layer.params
     if non_static:
         #if word vectors are allowed to change, add them as model parameters
         params_p += [Words]
+    # 公式 (2)——objective function
     cost_p = logic_nn.negative_log_likelihood(y) 
     dropout_cost_p = logic_nn.dropout_negative_log_likelihood(y) 
     grad_updates_p = sgd_updates_adadelta(params_p, dropout_cost_p, lr_decay, 1e-6, sqr_norm_lim)
